@@ -1265,6 +1265,7 @@ export interface GrokAccount {
 }
 
 export interface GrokAccountUsage {
+  status?: "loading" | "ready" | "signInRequired" | "unavailable" | "failed";
   usageAvailable: boolean;
   usedPercent: number | null;
   plan: string | null;

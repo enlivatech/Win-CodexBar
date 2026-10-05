@@ -44,6 +44,7 @@ export default function CodexAccountsMenu({
   const [signingIn, setSigningIn] = useState(false);
   const busy = loading || pending;
   const [error, setError] = useState<string | null>(null);
+  const [switched, setSwitched] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,7 +69,7 @@ export default function CodexAccountsMenu({
 
   useEffect(() => {
     onLayoutChange?.();
-  }, [accounts, snapshots, error, pending, onLayoutChange]);
+  }, [accounts, snapshots, error, pending, switched, onLayoutChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +83,7 @@ export default function CodexAccountsMenu({
   }, [load]);
 
   const run = async (action: () => Promise<unknown>, login = false) => {
+    setSwitched(false);
     setSigningIn(login);
     setPending(true);
     setError(null);
@@ -97,7 +99,11 @@ export default function CodexAccountsMenu({
     }
   };
 
-  const handleSwitch = (id: string) => run(() => codexAccountSwitch(id));
+  const handleSwitch = (id: string) =>
+    run(async () => {
+      await codexAccountSwitch(id);
+      setSwitched(true);
+    });
   const ambient = accounts.find((account) => account.source === "ambient");
 
   const accountDisplayNames = buildCodexAccountSurfaceLabels(
@@ -131,6 +137,7 @@ export default function CodexAccountsMenu({
           {t(signingIn ? "CodexAccountsSigningIn" : "TrayLoading")}
         </div>
       )}
+      {switched && <p role="status">{t("CodexAccountsSwitchedHint")}</p>}
       {error && (
         <div className="codex-menu-accounts__error" role="alert">
           {error}
@@ -270,7 +277,11 @@ function AccountWindow({
       </span>
       <span className="codex-menu-accounts__bar" aria-hidden>
         {known && (
-          <span className="codex-menu-accounts__bar-fill" style={{ width: `${remaining}%` }} />
+          <span
+            className="codex-menu-accounts__bar-fill"
+            data-level={used >= 100 ? "exhausted" : used >= 90 ? "critical" : undefined}
+            style={{ width: `${remaining}%` }}
+          />
         )}
       </span>
     </div>

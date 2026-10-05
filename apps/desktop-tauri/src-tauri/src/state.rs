@@ -120,6 +120,8 @@ pub struct AppState {
     pub surface_machine: SurfaceStateMachine,
     pub current_target: SurfaceTarget,
     pub tray_anchor: Option<TrayAnchor>,
+    /// Cursor location captured for a desktop launch; cleared by tray/other opens.
+    pub flyout_cursor_anchor: Option<(f64, f64)>,
     pub provider_cache: Vec<ProviderUsageSnapshot>,
     pub claude_account_usage: HashMap<String, crate::commands::ClaudeAccountUsageState>,
     pub codex_account_needs_authentication: HashMap<uuid::Uuid, bool>,
@@ -200,6 +202,7 @@ impl AppState {
             surface_machine: SurfaceStateMachine::new(),
             current_target: SurfaceTarget::Summary,
             tray_anchor: None,
+            flyout_cursor_anchor: None,
             provider_cache: Vec::new(),
             claude_account_usage: HashMap::new(),
             codex_account_needs_authentication: HashMap::new(),
