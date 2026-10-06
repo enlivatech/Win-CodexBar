@@ -38,7 +38,7 @@ pub const FLYOUT_LABEL: &str = "flyout";
 ///
 /// The earlier `"flyout"` size entry held physical px, which only fit the
 /// monitor it was taken on; it is ignored, so a user who resized under it
-/// gets the auto-fit size once.
+/// gets the legacy `"trayPanel"` size, or else the auto-fit size, once.
 const FLYOUT_SIZE_KEY: &str = "flyoutLogical";
 
 /// Same window used to close a same-click blur-dismiss/reopen race as the
@@ -54,6 +54,10 @@ const RECENTLY_SHOWN_GRACE: Duration = Duration::from_millis(500);
 /// Set once at startup by `CODEXBAR_START_VISIBLE`: keeps the flyout open
 /// when it loses focus, for automation flows that need it to stay visible.
 static KEEP_OPEN_ON_BLUR: AtomicBool = AtomicBool::new(false);
+
+/// Set by a DPI change of the flyout; the next `Resized` (the rescale itself)
+/// re-clamps a user-placed flyout at its new size.
+static RECLAMP_AFTER_RESCALE: AtomicBool = AtomicBool::new(false);
 
 /// Keep the flyout open on focus loss for the rest of this process.
 pub fn keep_open_on_blur() {
@@ -156,6 +160,9 @@ fn open_with_anchor(
         .decorations(props.decorations)
         .shadow(false)
         .resizable(props.resizable)
+        // No maximize box: dragging the move strip to a screen edge must not
+        // snap or maximize the panel.
+        .maximizable(false)
         .always_on_top(settings.tray_panel_always_on_top)
         .skip_taskbar(props.skip_taskbar)
         .theme(Some(tauri::Theme::Dark))
@@ -363,19 +370,23 @@ pub fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) -
         // skipping TrayPanel for the same reason on the old shared window.
         // User positions are recorded by `flyout_placement` when the native
         // move/size loop ends, not per event.
-        tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => true,
+        tauri::WindowEvent::Moved(_) => true,
         tauri::WindowEvent::ScaleFactorChanged { .. } => {
-            // Landing on a monitor with another DPI rescales the window after
-            // it was clamped at the old size. Clamp again once the new size is
-            // applied, unless the user is still dragging it.
-            if super::flyout_placement::stored_position().is_some()
+            // The window is rescaled right after this event; clamp on that
+            // `Resized`, when the new size is in place.
+            RECLAMP_AFTER_RESCALE.store(true, Ordering::Relaxed);
+            true
+        }
+        tauri::WindowEvent::Resized(_) => {
+            // Landing on a monitor with another DPI rescales a placed flyout
+            // after it was clamped at the old size, which can push it past the
+            // work area. Not while the user is still dragging it.
+            if RECLAMP_AFTER_RESCALE.swap(false, Ordering::Relaxed)
+                && super::flyout_placement::stored_position().is_some()
                 && !super::flyout_placement::user_move_in_progress()
             {
-                let app = app.clone();
-                // Queued behind the rescale; a failure only skips the clamp.
-                let _reclamp = window.run_on_main_thread(move || {
-                    let _reanchor = reanchor(&app);
-                });
+                // Best-effort; a failure leaves the panel where Windows put it.
+                let _reclamp = reanchor(app);
             }
             true
         }
@@ -410,6 +421,12 @@ pub fn reanchor(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(FLYOUT_LABEL)
         .ok_or_else(|| "flyout window unavailable".to_string())?;
+
+    // Never move the window out from under the user's drag; the loop's end
+    // records where it landed.
+    if super::flyout_placement::user_move_in_progress() {
+        return Ok(());
+    }
 
     // A flyout the user dragged elsewhere stays there; only its on-screen
     // clamp follows the current size.

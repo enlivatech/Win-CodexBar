@@ -10,10 +10,8 @@
 //! or its frame, never for `SetWindowPos`, so the flyout's own re-anchoring
 //! can't be mistaken for a user move.
 
-use tauri::Manager;
-
 use crate::geometry_store::{self, StoredGeometry};
-use crate::window_positioner::{self, PanelSize};
+use crate::window_positioner::{self, PanelSize, Rect};
 
 /// Geometry-store key for the remembered flyout position. Lives in the
 /// position `entries` map, separate from the size-only `"flyout"` entry.
@@ -41,23 +39,31 @@ pub fn clear_position() {
     geometry_store::remove_entry(FLYOUT_POSITION_KEY);
 }
 
-/// The remembered position, clamped into the work area of the monitor that
-/// holds it (the primary monitor when that one is gone), so a monitor layout
-/// change can't leave the panel off-screen. `None` when the user never moved
-/// the flyout.
+/// The remembered position, clamped into the work area the panel overlaps
+/// most (or the nearest one when a monitor layout change left it on none), so
+/// the panel can't end up off-screen. `None` when the user never moved the
+/// flyout.
 pub fn placed_position(window: &tauri::WebviewWindow) -> Option<(i32, i32)> {
     let (x, y) = stored_position()?;
-    let monitor = window
-        .monitor_from_point(f64::from(x), f64::from(y))
-        .ok()
-        .flatten()
-        .or_else(|| window.primary_monitor().ok().flatten())?;
     let outer = window.outer_size().ok()?;
+    let panel = Rect {
+        x,
+        y,
+        width: outer.width,
+        height: outer.height,
+    };
+    let work_areas: Vec<Rect> = window
+        .available_monitors()
+        .ok()?
+        .iter()
+        .map(super::geometry::monitor_work_area_rect)
+        .collect();
+    let work_area = best_work_area(&work_areas, &panel)?;
     // The size is already physical, so clamp with a 1.0 scale.
     Some(window_positioner::clamp_position_to_work_area(
         x,
         y,
-        &super::geometry::monitor_work_area_rect(&monitor),
+        &work_area,
         &PanelSize {
             width: outer.width,
             height: outer.height,
@@ -66,35 +72,70 @@ pub fn placed_position(window: &tauri::WebviewWindow) -> Option<(i32, i32)> {
     ))
 }
 
-/// Whether a mouse button is held with the cursor over the flyout.
+/// The work area `panel` overlaps most; with no overlap, the one whose center
+/// is nearest.
+fn best_work_area(work_areas: &[Rect], panel: &Rect) -> Option<Rect> {
+    work_areas.iter().copied().max_by_key(|area| {
+        (
+            overlap_area(area, panel),
+            std::cmp::Reverse(center_distance(area, panel)),
+        )
+    })
+}
+
+fn overlap_area(a: &Rect, b: &Rect) -> i64 {
+    let width = (right(a).min(right(b)) - i64::from(a.x).max(i64::from(b.x))).max(0);
+    let height = (bottom(a).min(bottom(b)) - i64::from(a.y).max(i64::from(b.y))).max(0);
+    width * height
+}
+
+fn center_distance(a: &Rect, b: &Rect) -> i64 {
+    // Doubled centers keep the math in integers.
+    let dx = (i64::from(a.x) + right(a)) - (i64::from(b.x) + right(b));
+    let dy = (i64::from(a.y) + bottom(a)) - (i64::from(b.y) + bottom(b));
+    dx * dx + dy * dy
+}
+
+fn right(rect: &Rect) -> i64 {
+    i64::from(rect.x) + i64::from(rect.width)
+}
+
+fn bottom(rect: &Rect) -> i64 {
+    i64::from(rect.y) + i64::from(rect.height)
+}
+
+/// Whether a mouse button is held on the flyout itself.
 ///
 /// Windows moves focus off the WebView the moment a move or resize starts on
 /// the window frame, so the flyout sees a blur before the gesture even
 /// begins. A blur while the user is pressing on the panel itself is that
-/// gesture, not a click somewhere else.
+/// gesture, not a click somewhere else. The window under the cursor is
+/// checked, not the panel's bounds, so a click on another topmost window
+/// covering the panel still dismisses it.
+#[cfg(windows)]
 pub fn pointer_pressed_inside(window: &tauri::Window) -> bool {
+    const GA_ROOT: u32 = 2;
     if !mouse_button_down() {
         return false;
     }
-    let (Ok(cursor), Ok(origin), Ok(size)) = (
-        window.app_handle().cursor_position(),
-        window.outer_position(),
-        window.outer_size(),
-    ) else {
+    let Some(flyout) = super::activation::root_hwnd(window) else {
         return false;
     };
-    point_in_window(
-        (cursor.x, cursor.y),
-        (origin.x, origin.y),
-        (size.width, size.height),
-    )
+    let mut cursor = Win32Point::default();
+    // SAFETY: GetCursorPos writes the caller-owned point; WindowFromPoint and
+    // GetAncestor only read the window tree.
+    unsafe {
+        if GetCursorPos(&mut cursor) == 0 {
+            return false;
+        }
+        let under_cursor = WindowFromPoint(cursor);
+        under_cursor != 0 && GetAncestor(under_cursor, GA_ROOT) == flyout
+    }
 }
 
-fn point_in_window(point: (f64, f64), origin: (i32, i32), size: (u32, u32)) -> bool {
-    let (x, y) = point;
-    let left = f64::from(origin.0);
-    let top = f64::from(origin.1);
-    x >= left && x < left + f64::from(size.0) && y >= top && y < top + f64::from(size.1)
+#[cfg(not(windows))]
+pub fn pointer_pressed_inside(_window: &tauri::Window) -> bool {
+    false
 }
 
 /// Outer window bounds in physical px, as `GetWindowRect` reports them.
@@ -175,6 +216,8 @@ const WM_ENTERSIZEMOVE: u32 = 0x0231;
 const WM_EXITSIZEMOVE: u32 = 0x0232;
 #[cfg(windows)]
 const WM_SIZING: u32 = 0x0214;
+#[cfg(windows)]
+const WM_NCDESTROY: u32 = 0x0082;
 
 /// The move/size loop in progress. There is one flyout window, so one slot
 /// is enough.
@@ -204,6 +247,16 @@ unsafe extern "system" fn size_move_subclass_proc(
                 && let Some(size_move) = size_move.as_mut()
             {
                 size_move.resizing = true;
+            }
+        }
+        WM_NCDESTROY => {
+            if let Ok(mut size_move) = SIZE_MOVE.lock() {
+                *size_move = None;
+            }
+            // SAFETY: removes this subclass from the window being destroyed,
+            // on its owning thread.
+            unsafe {
+                RemoveWindowSubclass(hwnd, size_move_subclass_proc, SIZE_MOVE_SUBCLASS_ID);
             }
         }
         WM_EXITSIZEMOVE => {
@@ -253,9 +306,12 @@ fn mouse_button_down() -> bool {
         .any(|key| unsafe { GetAsyncKeyState(key) } < 0)
 }
 
-#[cfg(not(windows))]
-fn mouse_button_down() -> bool {
-    false
+#[cfg(windows)]
+#[repr(C)]
+#[derive(Default)]
+struct Win32Point {
+    x: i32,
+    y: i32,
 }
 
 #[cfg(windows)]
@@ -275,6 +331,9 @@ struct Win32Rect {
 unsafe extern "system" {
     fn GetAsyncKeyState(key: i32) -> i16;
     fn GetWindowRect(hwnd: isize, rect: *mut Win32Rect) -> i32;
+    fn GetCursorPos(point: *mut Win32Point) -> i32;
+    fn WindowFromPoint(point: Win32Point) -> isize;
+    fn GetAncestor(hwnd: isize, flags: u32) -> isize;
 }
 
 #[cfg(windows)]
@@ -289,6 +348,11 @@ unsafe extern "system" {
         data: usize,
     ) -> i32;
     fn DefSubclassProc(hwnd: isize, msg: u32, wparam: usize, lparam: isize) -> isize;
+    fn RemoveWindowSubclass(
+        hwnd: isize,
+        proc: unsafe extern "system" fn(isize, u32, usize, isize, usize, usize) -> isize,
+        id: usize,
+    ) -> i32;
 }
 
 #[cfg(test)]
@@ -370,21 +434,45 @@ mod tests {
         assert_eq!(placement_after_size_move(moved(start), start, false), None);
     }
 
-    #[test]
-    fn a_press_on_the_frame_counts_as_inside() {
-        let origin = (100, 200);
-        let size = (300, 800);
-        assert!(point_in_window((100.0, 200.0), origin, size));
-        assert!(point_in_window((399.0, 999.0), origin, size));
+    fn area(x: i32, y: i32, width: u32, height: u32) -> Rect {
+        Rect {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    // A stacked layout: primary monitor below, a taller one above.
+    fn stacked_work_areas() -> Vec<Rect> {
+        vec![area(0, 0, 2560, 1392), area(0, -2560, 3840, 2452)]
     }
 
     #[test]
-    fn a_press_outside_the_window_is_not_inside() {
-        let origin = (100, 200);
-        let size = (300, 800);
-        assert!(!point_in_window((400.0, 500.0), origin, size));
-        assert!(!point_in_window((99.0, 500.0), origin, size));
-        assert!(!point_in_window((200.0, 1000.0), origin, size));
-        assert!(!point_in_window((200.0, 199.0), origin, size));
+    fn a_panel_straddling_two_monitors_belongs_to_the_one_it_overlaps_most() {
+        let panel = area(800, -900, 400, 1000);
+        let chosen = best_work_area(&stacked_work_areas(), &panel).expect("work area");
+        assert_eq!((chosen.x, chosen.y), (0, -2560));
+    }
+
+    #[test]
+    fn a_panel_whose_corner_hangs_off_screen_stays_on_its_monitor() {
+        // The top-left corner is left of every monitor.
+        let panel = area(-40, 300, 400, 900);
+        let chosen = best_work_area(&stacked_work_areas(), &panel).expect("work area");
+        assert_eq!((chosen.x, chosen.y), (0, 0));
+    }
+
+    #[test]
+    fn a_panel_on_a_monitor_that_is_gone_moves_to_the_nearest_one() {
+        // It was on a monitor right of the primary that has been unplugged.
+        let panel = area(3000, 200, 400, 900);
+        let chosen = best_work_area(&stacked_work_areas(), &panel).expect("work area");
+        assert_eq!((chosen.x, chosen.y), (0, 0));
+    }
+
+    #[test]
+    fn no_monitors_means_no_placement() {
+        assert!(best_work_area(&[], &area(0, 0, 400, 900)).is_none());
     }
 }

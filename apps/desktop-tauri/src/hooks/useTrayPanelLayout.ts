@@ -119,12 +119,26 @@ export function useTrayPanelLayout({
   // Report genuine user drag-resizes. Ignore resizes that fire while WE are
   // resizing (in-flight counter) or whose physical size still matches the last
   // size we applied; anything else is the user dragging the border. Everything
-  // is in PHYSICAL pixels — no scale conversion, so it can't drift.
+  // is in PHYSICAL pixels — no scale conversion, so it can't drift. A DPI change
+  // (the panel moved onto a monitor with other scaling) announces its rescaled
+  // size first; adopting it keeps that rescale from counting as a user resize,
+  // which would freeze an auto-fit panel at a fixed size.
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let unlistenScale: (() => void) | undefined;
     let cancelled = false;
     const win = getCurrentWindow();
     void (async () => {
+      try {
+        unlistenScale = await win.onScaleChanged(({ payload }) => {
+          lastSizeRef.current = {
+            width: payload.size.width,
+            height: payload.size.height,
+          };
+        });
+      } catch {
+        unlistenScale = undefined;
+      }
       try {
         unlisten = await win.onResized(({ payload }) => {
           if (programmaticInFlightRef.current > 0) return;
@@ -141,11 +155,15 @@ export function useTrayPanelLayout({
       } catch {
         unlisten = undefined;
       }
-      if (cancelled) unlisten?.();
+      if (cancelled) {
+        unlisten?.();
+        unlistenScale?.();
+      }
     })();
     return () => {
       cancelled = true;
       unlisten?.();
+      unlistenScale?.();
     };
   }, []);
 

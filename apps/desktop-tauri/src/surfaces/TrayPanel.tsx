@@ -6,7 +6,6 @@ import { costPeriodShortLabel } from "../lib/costPeriod";
 import { useCurrency } from "../hooks/CurrencyProvider";
 import { sumDisplayCurrencyAmounts } from "../lib/currency";
 import {
-  beginFlyoutGesture,
   getUsageSpendSummary,
   openProviderDashboard,
   openProviderStatusPage,
@@ -303,16 +302,14 @@ const RESIZE_GRIPS: ReadonlyArray<{ edge: string; direction: ResizeDirection }> 
 
 /**
  * Window handles for the borderless flyout: a move strip along the top and
- * invisible resize grips on every edge and corner. Native edge-resize doesn't
- * reach through the borderless WebView2, so both are driven explicitly with
- * `startDragging` / `startResizeDragging`. Those calls enter a Win32 modal
- * move/size loop which transiently steals focus from the WebView2 child —
- * Windows fires a spurious `Focused(false)` the instant the press starts even
- * though the user never left the window. We arm a gesture-scoped blur guard on
- * the backend *before* starting the loop so that transient blur doesn't
- * auto-hide the flyout; the guard clears itself once focus genuinely returns
- * (via the `Focused(true)` refocus path) or after a 15s expiry, so no
- * explicit end call is needed here — the OS loop swallows mouseup.
+ * invisible resize grips on every edge and corner. The native frame left
+ * around the borderless WebView2 is only a few pixels wide, so both are driven
+ * explicitly with `startDragging` / `startResizeDragging`. Those calls enter a
+ * Win32 modal move/size loop which transiently steals focus from the WebView2
+ * child — Windows fires a spurious `Focused(false)` the instant the press
+ * starts. The backend keeps the flyout open on a blur while a mouse button is
+ * held on it, so no gesture guard is armed here; arming one would also keep
+ * the next genuine outside click from dismissing the panel for up to 15s.
  *
  * Dragging the strip moves the flyout away from the tray and the backend
  * remembers the spot; double-clicking it anchors the flyout to the tray again.
@@ -333,10 +330,9 @@ function TrayWindowHandles({ moveHint }: { moveHint: string }) {
             );
             return;
           }
-          void (async () => {
-            await beginFlyoutGesture().catch(() => {});
-            await getCurrentWindow().startDragging();
-          })().catch((err) => console.error("[tray-move] startDragging failed:", err));
+          void getCurrentWindow()
+            .startDragging()
+            .catch((err) => console.error("[tray-move] startDragging failed:", err));
         }}
       >
         <span className="tray-move-handle__grip" />
@@ -347,11 +343,11 @@ function TrayWindowHandles({ moveHint }: { moveHint: string }) {
           className={`tray-resize tray-resize--${edge}`}
           aria-hidden
           onMouseDown={(e) => {
+            if (e.button !== 0) return;
             e.preventDefault();
-            void (async () => {
-              await beginFlyoutGesture().catch(() => {});
-              await getCurrentWindow().startResizeDragging(direction);
-            })().catch((err) => console.error("[tray-resize] startResizeDragging failed:", err));
+            void getCurrentWindow()
+              .startResizeDragging(direction)
+              .catch((err) => console.error("[tray-resize] startResizeDragging failed:", err));
           }}
         />
       ))}

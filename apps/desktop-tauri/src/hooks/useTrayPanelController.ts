@@ -8,6 +8,7 @@ import {
   flyoutStoredSize,
   openSettingsWindow,
   quitApp as quitApplication,
+  reanchorTrayPanel,
   reorderProviders,
   setFlyoutSize,
   updateSettings,
@@ -244,6 +245,9 @@ export function useTrayPanelController(state: BootstrapState) {
             Math.round(height / scale),
           ];
           setFlyoutSizeState(logical);
+          // Re-anchor at the new size like every other resize, so a panel
+          // widened from its tray-facing edge doesn't stay past the taskbar.
+          void Promise.resolve(reanchorTrayPanel()).catch(() => {});
           return setFlyoutSize(logical[0], logical[1]);
         })
         .catch(() => {});
