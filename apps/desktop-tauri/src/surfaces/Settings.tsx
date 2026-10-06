@@ -232,7 +232,7 @@ export default function Settings({ state, initialTab: propTab }: { state: Bootst
       <div className="settings-status-slot">
         {(saving || error) && (
           <div
-            className={`settings-status ${error ? "settings-status--error" : "settings-status--floating"}`}
+            className={`settings-status ${saving ? "settings-status--floating" : "settings-status--error"}`}
           >
             {saving ? t("SettingsStatusSaving") : error}
           </div>

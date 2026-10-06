@@ -12,11 +12,18 @@ interface UseSettingsReturn {
 
 const SAVING_INDICATOR_DELAY_MS = 300;
 
+/**
+ * Patch fields whose snapshot value is not the patch value: the shortcut patch
+ * holds overrides only while the snapshot holds the resolved map. They stay as
+ * they are until the save response supplies the resolved value.
+ */
+const NOT_OPTIMISTIC: ReadonlySet<string> = new Set(["switcherShortcuts"]);
+
 /** Copies the patch fields that also exist in the snapshot (write-only fields are skipped). */
 function applyPatch(current: SettingsSnapshot, patch: SettingsUpdate): SettingsSnapshot {
   const next: Record<string, unknown> = { ...current };
   for (const [key, value] of Object.entries(patch)) {
-    if (value !== undefined && key in current) next[key] = value;
+    if (value !== undefined && key in current && !NOT_OPTIMISTIC.has(key)) next[key] = value;
   }
   // Accent colors are sent as a per-provider merge patch (`null` clears one
   // provider), not as the full map.
@@ -27,6 +34,10 @@ function applyPatch(current: SettingsSnapshot, patch: SettingsUpdate): SettingsS
       else colors[id] = color;
     }
     next.providerAccentColors = colors;
+  }
+  // Metric preferences are merged per provider as well.
+  if (patch.providerMetrics) {
+    next.providerMetrics = { ...current.providerMetrics, ...patch.providerMetrics };
   }
   return next as unknown as SettingsSnapshot;
 }
@@ -39,6 +50,9 @@ export function useSettings(initial: SettingsSnapshot): UseSettingsReturn {
   const [settings, setSettings] = useState<SettingsSnapshot>(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Saves started from this window that have not answered yet.
+  const pendingSaves = useRef(0);
+  const [anyPending, setAnyPending] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,7 +88,11 @@ export function useSettings(initial: SettingsSnapshot): UseSettingsReturn {
     Promise.resolve(
       listen("settings-changed", () => {
         getSettingsSnapshot()
-          .then((fresh) => setSettings(fresh))
+          .then((fresh) => {
+            // While a save from this window is pending, its response is the
+            // newer state; an earlier save's broadcast must not undo it.
+            if (pendingSaves.current === 0) setSettings(fresh);
+          })
           .catch(() => {
             // Keep the current copy if the refresh fails.
           });
@@ -98,15 +116,16 @@ export function useSettings(initial: SettingsSnapshot): UseSettingsReturn {
   // opacity. A local save finishes in a few milliseconds, so raising the flag
   // immediately made the whole tab blink on every checkbox click. Only report
   // `saving` once a save has been pending for a noticeable time.
-  const [pending, setPending] = useState(0);
+  // Keyed on whether any save is pending, not on how many, so an overlapping
+  // save does not restart the delay.
   useEffect(() => {
-    if (pending === 0) {
+    if (!anyPending) {
       setSaving(false);
       return;
     }
     const timer = window.setTimeout(() => setSaving(true), SAVING_INDICATOR_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [pending]);
+  }, [anyPending]);
 
   // Responses of overlapping saves may arrive out of order; only the latest
   // one is applied so an older snapshot cannot undo a newer change.
@@ -114,7 +133,8 @@ export function useSettings(initial: SettingsSnapshot): UseSettingsReturn {
 
   const update = useCallback(async (patch: SettingsUpdate) => {
     const request = ++latestRequest.current;
-    setPending((n) => n + 1);
+    pendingSaves.current += 1;
+    setAnyPending(true);
     setError(null);
     // Show the change right away instead of waiting for the round trip: the
     // controls are controlled, so without this a checkbox flips only after
@@ -132,6 +152,8 @@ export function useSettings(initial: SettingsSnapshot): UseSettingsReturn {
         );
       }
     } catch (err: unknown) {
+      // A newer save is in flight; its outcome decides what is shown.
+      if (request !== latestRequest.current) return;
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
       // Re-fetch to stay in sync with disk state on failure
@@ -142,7 +164,8 @@ export function useSettings(initial: SettingsSnapshot): UseSettingsReturn {
         // ignore secondary failure
       }
     } finally {
-      setPending((n) => n - 1);
+      pendingSaves.current -= 1;
+      if (pendingSaves.current === 0) setAnyPending(false);
     }
   }, []);
 
