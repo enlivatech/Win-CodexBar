@@ -447,6 +447,7 @@ DisplayModeCompact = 緊湊
 DisplayModeMinimal = 最簡
 TrayPanelAlwaysOnTopLabel = 永遠置頂
 TrayPanelAlwaysOnTopHelper = 即使失去焦點，也讓系統匣面板保持在其他視窗上方。
+TrayMoveHandleHint = 拖曳以移動。按兩下可放回系統匣旁。
 WindowMinimize = 最小化
 WindowRestore = 還原
 WindowClose = 關閉

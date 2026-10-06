@@ -214,6 +214,7 @@ fn main() {
             commands::close_settings_window,
             commands::set_flyout_size,
             commands::flyout_stored_size,
+            commands::reset_flyout_position,
             commands::get_current_surface_state,
             commands::refresh_providers,
             commands::refresh_providers_if_stale,

@@ -895,6 +895,7 @@ locale_keys! {
     DisplayModeMinimal,
     TrayPanelAlwaysOnTopLabel,
     TrayPanelAlwaysOnTopHelper,
+    TrayMoveHandleHint,
     WindowMinimize,
     WindowRestore,
     WindowClose,

@@ -460,6 +460,7 @@ DisplayModeCompact = コンパクト
 DisplayModeMinimal = 最小
 TrayPanelAlwaysOnTopLabel = 常に手前に表示
 TrayPanelAlwaysOnTopHelper = フォーカスを失っても、トレイパネルを他のウィンドウより前面に表示します。
+TrayMoveHandleHint = ドラッグで移動。ダブルクリックでトレイの横に戻します。
 WindowMinimize = 最小化
 WindowRestore = 元に戻す
 WindowClose = 閉じる

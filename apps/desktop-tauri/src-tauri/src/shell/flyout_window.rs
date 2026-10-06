@@ -5,7 +5,8 @@
 //! `main` window's surface state machine. It is the only dashboard layout:
 //! tray left-click, "Pop Out Dashboard", the global shortcut, app launch and
 //! single-instance relaunch all open it. The legacy PopOut layout on `main`
-//! is retired.
+//! is retired. It opens next to the tray until the user drags it elsewhere;
+//! `super::flyout_placement` remembers that spot.
 //!
 //! Structurally modeled on `crate::floatbar` (self-contained module owning
 //! its window + a `handle_window_event` hook dispatched from `main.rs`
@@ -27,13 +28,18 @@ use crate::surface::SurfaceMode;
 
 pub const FLYOUT_LABEL: &str = "flyout";
 
-/// Geometry-store key for the flyout's remembered SIZE (position is never
-/// stored — each open chooses a tray or captured cursor anchor). Kept as
-/// its own key (distinct from the legacy `SurfaceMode::TrayPanel::as_str()`
-/// `"trayPanel"` key) — `geometry_store::load_size` migrates a pre-existing
-/// `"trayPanel"` entry into this key on first read, so upgrading users keep
-/// their remembered flyout size.
-const FLYOUT_SIZE_KEY: &str = "flyout";
+/// Geometry-store key for the flyout's remembered SIZE in logical px (the
+/// position is stored separately, and only after the user drags the flyout).
+/// Kept as its own key (distinct from the legacy
+/// `SurfaceMode::TrayPanel::as_str()` `"trayPanel"` key) —
+/// `geometry_store::load_size` migrates a pre-existing `"trayPanel"` entry
+/// into this key on first read, so upgrading users keep their remembered
+/// flyout size.
+///
+/// The earlier `"flyout"` size entry held physical px, which only fit the
+/// monitor it was taken on; it is ignored, so a user who resized under it
+/// gets the auto-fit size once.
+const FLYOUT_SIZE_KEY: &str = "flyoutLogical";
 
 /// Same window used to close a same-click blur-dismiss/reopen race as the
 /// pre-split tray panel handling (formerly `shell::transition::handle_tray_panel_click`,
@@ -60,7 +66,8 @@ pub fn stored_size() -> Option<(u32, u32)> {
     geometry_store::load_size(FLYOUT_SIZE_KEY).map(|size| (size.width, size.height))
 }
 
-/// Persist a user-chosen flyout size. Size-only — no fabricated position.
+/// Persist a user-chosen flyout size in logical px. Size-only — no
+/// fabricated position.
 pub fn save_stored_size(width: u32, height: u32) {
     geometry_store::save_size(FLYOUT_SIZE_KEY, StoredSize { width, height });
 }
@@ -172,8 +179,10 @@ fn open_with_anchor(
     // Force DWM caption dark; keep WS_THICKFRAME (resizable) like the
     // Settings window.
     super::dwm::force_dark_caption_resizable(&win);
+    super::flyout_placement::track_user_moves(&win);
 
-    if cursor.is_some() {
+    let user_placed = position.is_none() && super::flyout_placement::stored_position().is_some();
+    if cursor.is_some() || user_placed {
         reanchor(app)?;
     } else if let Some((x, y)) =
         position.or_else(|| super::position::default_surface_position(app, SurfaceMode::TrayPanel))
@@ -315,6 +324,11 @@ pub fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) -
             {
                 return true;
             }
+            // A press on the panel's own frame starts a native move/resize,
+            // which blurs the WebView before the gesture begins.
+            if super::flyout_placement::pointer_pressed_inside(window) {
+                return true;
+            }
             let Some(st) = app.try_state::<Mutex<AppState>>() else {
                 return true;
             };
@@ -347,8 +361,24 @@ pub fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) -
         // drag-resizes call `set_flyout_size`, auto-fit resizes never do) —
         // mirrors `shell::position::remember_current_geometry_if_eligible`
         // skipping TrayPanel for the same reason on the old shared window.
-        // Position is never persisted; resizing follows this open's selected anchor.
+        // User positions are recorded by `flyout_placement` when the native
+        // move/size loop ends, not per event.
         tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => true,
+        tauri::WindowEvent::ScaleFactorChanged { .. } => {
+            // Landing on a monitor with another DPI rescales the window after
+            // it was clamped at the old size. Clamp again once the new size is
+            // applied, unless the user is still dragging it.
+            if super::flyout_placement::stored_position().is_some()
+                && !super::flyout_placement::user_move_in_progress()
+            {
+                let app = app.clone();
+                // Queued behind the rescale; a failure only skips the clamp.
+                let _reclamp = window.run_on_main_thread(move || {
+                    let _reanchor = reanchor(&app);
+                });
+            }
+            true
+        }
         tauri::WindowEvent::CloseRequested { api, .. } => {
             // Hide-not-close on a native close request (Alt+F4-equivalent from
             // a screen reader): the flyout survives so it can be reopened without
@@ -362,7 +392,14 @@ pub fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) -
     }
 }
 
-/// Reposition the flyout at its captured cursor or system-tray anchor,
+/// Forget where the user dragged the flyout and anchor it to the tray again.
+pub fn reset_position(app: &AppHandle) -> Result<(), String> {
+    super::flyout_placement::clear_position();
+    reanchor(app)
+}
+
+/// Reposition the flyout at the user's spot, or else its captured cursor or
+/// system-tray anchor,
 /// using the window's CURRENT logical size (after a
 /// frontend-driven resize). Canonical anchor-math implementation for the
 /// flyout window; the `reanchor_tray_panel` Tauri command
@@ -373,6 +410,15 @@ pub fn reanchor(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(FLYOUT_LABEL)
         .ok_or_else(|| "flyout window unavailable".to_string())?;
+
+    // A flyout the user dragged elsewhere stays there; only its on-screen
+    // clamp follows the current size.
+    if let Some((x, y)) = super::flyout_placement::placed_position(&window) {
+        // Best-effort, like the anchored set_position below.
+        let _set_placed = window.set_position(PhysicalPosition::new(x, y));
+        return Ok(());
+    }
+
     let scale = window.scale_factor().unwrap_or(1.0).max(1.0);
 
     let outer = window.outer_size().map_err(|e| e.to_string())?;
@@ -470,6 +516,13 @@ mod tests {
         // that this key differs from the legacy SurfaceMode::TrayPanel key
         // ("trayPanel") — otherwise there'd be nothing to migrate FROM.
         assert_ne!(FLYOUT_SIZE_KEY, SurfaceMode::TrayPanel.as_str());
+    }
+
+    #[test]
+    fn flyout_size_key_skips_the_old_physical_px_entry() {
+        // "flyout" sizes were physical px; reading them as logical would open
+        // the panel scale-factor times too large on a scaled display.
+        assert_ne!(FLYOUT_SIZE_KEY, "flyout");
     }
 
     #[test]

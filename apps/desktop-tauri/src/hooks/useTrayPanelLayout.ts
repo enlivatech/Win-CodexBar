@@ -41,8 +41,8 @@ export interface TrayPanelLayoutOptions {
   layoutKey: string;
   /** Auto-fit the window to its content (until the user sets a size). */
   autoFit?: boolean;
-  /** The user's remembered size, re-applied + re-anchored each time the flyout
-   *  opens. `null` when the user has not resized yet. */
+  /** The user's remembered size in logical px, re-applied + re-anchored each
+   *  time the flyout opens. `null` when the user has not resized yet. */
   fixedSize?: [number, number] | null;
   /** Whether the flyout is currently open (surface mode === trayPanel). Used as
    *  the "just opened" trigger for the fixed-size restore + re-anchor. */
@@ -159,8 +159,9 @@ export function useTrayPanelLayout({
     if (!fixed) return;
     let cancelled = false;
     void (async () => {
-      // `fixed` is the user's remembered PHYSICAL size (scale-independent).
-      await applySize(new PhysicalSize(fixed[0], fixed[1]));
+      // `fixed` is the user's remembered LOGICAL size; the window converts it
+      // with the DPI of the monitor it is on now.
+      await applySize(new LogicalSize(fixed[0], fixed[1]));
       await Promise.resolve(reanchorTrayPanel()).catch(() => {});
       if (cancelled) return;
       layoutReadyRef.current = true;

@@ -25,6 +25,7 @@ const tauriMocks = vi.hoisted(() => ({
   revealTrayPanelWindow: vi.fn(),
   flyoutStoredSize: vi.fn().mockResolvedValue(null),
   setFlyoutSize: vi.fn().mockResolvedValue(undefined),
+  resetFlyoutPosition: vi.fn().mockResolvedValue(undefined),
   openProviderDashboard: vi.fn(),
   openProviderStatusPage: vi.fn(),
   getProviderChartData: vi.fn(),
@@ -42,7 +43,12 @@ const eventMocks = vi.hoisted(() => ({
 }));
 
 const windowMocks = vi.hoisted(() => ({
-  getCurrentWindow: vi.fn(() => ({
+  startDragging: vi.fn().mockResolvedValue(undefined),
+  startResizeDragging: vi.fn().mockResolvedValue(undefined),
+  // Loosely typed so tests can swap in windows with only the methods they use.
+  getCurrentWindow: vi.fn((): Record<string, unknown> => ({
+    startDragging: windowMocks.startDragging,
+    startResizeDragging: windowMocks.startResizeDragging,
     setSize: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
     scaleFactor: vi.fn().mockResolvedValue(1),
@@ -237,6 +243,10 @@ describe("TrayPanel provider grid", () => {
     tauriMocks.getDeepSeekPricingStatus.mockResolvedValue(null);
     tauriMocks.getUsageSpendSummary.mockResolvedValue({ rows: [], models: [] });
     tauriMocks.flyoutStoredSize.mockResolvedValue(null);
+    tauriMocks.beginFlyoutGesture.mockResolvedValue(undefined);
+    tauriMocks.resetFlyoutPosition.mockResolvedValue(undefined);
+    windowMocks.startDragging.mockResolvedValue(undefined);
+    windowMocks.startResizeDragging.mockResolvedValue(undefined);
     tauriMocks.refreshProviders.mockResolvedValue(undefined);
     tauriMocks.refreshProvidersIfStale.mockResolvedValue(undefined);
     tauriMocks.dismissTrayPanel.mockResolvedValue(undefined);
@@ -865,6 +875,74 @@ describe("TrayPanel provider grid", () => {
       "⌧Quit",
     ]);
     expect(tauriMocks.setSurfaceMode).not.toHaveBeenCalled();
+  });
+
+  it("offers a move strip and resize grips on every edge and corner", async () => {
+    const { container } = renderTrayPanel([provider("codex", "Codex", 20)]);
+
+    await waitFor(() => {
+      expect(container.querySelector(".tray-move-handle")).not.toBeNull();
+    });
+
+    const edges = Array.from(container.querySelectorAll(".tray-resize")).map((grip) =>
+      Array.from(grip.classList).find((name) => name.startsWith("tray-resize--")),
+    );
+    expect(edges.sort()).toEqual([
+      "tray-resize--bottom",
+      "tray-resize--bottomleft",
+      "tray-resize--bottomright",
+      "tray-resize--left",
+      "tray-resize--right",
+      "tray-resize--top",
+      "tray-resize--topleft",
+      "tray-resize--topright",
+    ]);
+  });
+
+  it("arms the blur guard and starts a native resize toward the grabbed corner", async () => {
+    const { container } = renderTrayPanel([provider("codex", "Codex", 20)]);
+    await waitFor(() => {
+      expect(container.querySelector(".tray-resize--bottomright")).not.toBeNull();
+    });
+
+    fireEvent.mouseDown(container.querySelector(".tray-resize--bottomright")!);
+
+    await waitFor(() => {
+      expect(windowMocks.startResizeDragging).toHaveBeenCalledWith("SouthEast");
+    });
+    expect(tauriMocks.beginFlyoutGesture).toHaveBeenCalled();
+  });
+
+  it("moves the flyout from the strip and puts it back by the tray on double-click", async () => {
+    const { container } = renderTrayPanel([provider("codex", "Codex", 20)]);
+    await waitFor(() => {
+      expect(container.querySelector(".tray-move-handle")).not.toBeNull();
+    });
+    const strip = container.querySelector(".tray-move-handle")!;
+
+    fireEvent.mouseDown(strip, { button: 0, detail: 1 });
+    await waitFor(() => {
+      expect(windowMocks.startDragging).toHaveBeenCalledTimes(1);
+    });
+    expect(tauriMocks.beginFlyoutGesture).toHaveBeenCalled();
+
+    fireEvent.mouseDown(strip, { button: 0, detail: 2 });
+    await waitFor(() => {
+      expect(tauriMocks.resetFlyoutPosition).toHaveBeenCalledTimes(1);
+    });
+    expect(windowMocks.startDragging).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores non-primary presses on the move strip", async () => {
+    const { container } = renderTrayPanel([provider("codex", "Codex", 20)]);
+    await waitFor(() => {
+      expect(container.querySelector(".tray-move-handle")).not.toBeNull();
+    });
+
+    fireEvent.mouseDown(container.querySelector(".tray-move-handle")!, { button: 2, detail: 1 });
+
+    expect(windowMocks.startDragging).not.toHaveBeenCalled();
+    expect(tauriMocks.resetFlyoutPosition).not.toHaveBeenCalled();
   });
 
   it("renders the tray footer zoom slider above Refresh and persists trayScalePercent after the debounce", async () => {
