@@ -279,6 +279,13 @@ try {
 
     $env:APP_VERSION = $version
     $env:CARGO_TARGET_DIR = $DesktopCargoTargetDir
+    # Link the C runtime statically into the desktop and CLI binaries so they
+    # start without the Visual C++ Redistributable (#761). With an explicit
+    # --target, RUSTFLAGS does not reach build scripts or proc macros.
+    $crtStaticFlag = "-C target-feature=+crt-static"
+    if ("$env:RUSTFLAGS" -notmatch [regex]::Escape($crtStaticFlag)) {
+        $env:RUSTFLAGS = ("$env:RUSTFLAGS $crtStaticFlag").Trim()
+    }
     if (-not $env:CARGO_BUILD_TARGET -and [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
         [System.Runtime.InteropServices.OSPlatform]::Windows
     )) {
