@@ -155,6 +155,7 @@ function Get-PeImportedDllNames {
         if ($nameRva -eq 0) { break }
         $start = & $toOffset $nameRva
         $end = [Array]::IndexOf($bytes, [byte]0, $start)
+        if ($end -lt 0) { throw "$Path has an unterminated import name at 0x$('{0:x}' -f $start)" }
         $names.Add([Text.Encoding]::ASCII.GetString($bytes, $start, $end - $start))
     }
     return $names.ToArray()
