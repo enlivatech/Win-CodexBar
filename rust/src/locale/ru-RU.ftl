@@ -448,6 +448,7 @@ DisplayModeCompact = Компактный
 DisplayModeMinimal = Минимальный
 TrayPanelAlwaysOnTopLabel = Поверх всех окон
 TrayPanelAlwaysOnTopHelper = Панель в области уведомлений остается поверх других окон даже после потери фокуса.
+TrayMoveHandleHint = Перетащите, чтобы переместить. Двойной щелчок вернёт панель к области уведомлений.
 WindowMinimize = Свернуть
 WindowRestore = Восстановить
 WindowClose = Закрыть

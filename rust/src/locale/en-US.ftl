@@ -545,6 +545,7 @@ DisplayModeCompact = Compact
 DisplayModeMinimal = Minimal
 TrayPanelAlwaysOnTopLabel = Always on top
 TrayPanelAlwaysOnTopHelper = Keep the tray panel above other windows, even when it loses focus.
+TrayMoveHandleHint = Drag to move. Double-click to put it back by the tray.
 WindowMinimize = Minimize
 WindowRestore = Restore
 WindowClose = Close

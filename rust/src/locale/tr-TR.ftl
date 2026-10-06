@@ -473,6 +473,7 @@ DisplayModeCompact = Kompakt
 DisplayModeMinimal = En az
 TrayPanelAlwaysOnTopLabel = Her zaman üstte
 TrayPanelAlwaysOnTopHelper = Odak kaybolduğunda bile tepsi panelini diğer pencerelerin üzerinde tutar.
+TrayMoveHandleHint = Taşımak için sürükleyin. Tepsinin yanına geri döndürmek için çift tıklayın.
 WindowMinimize = Simge durumuna küçült
 WindowRestore = Geri yükle
 WindowClose = Kapat

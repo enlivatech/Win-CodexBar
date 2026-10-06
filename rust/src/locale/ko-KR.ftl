@@ -465,6 +465,7 @@ DisplayModeCompact = 압축
 DisplayModeMinimal = 최소
 TrayPanelAlwaysOnTopLabel = 항상 위에 표시
 TrayPanelAlwaysOnTopHelper = 포커스를 잃어도 트레이 패널을 다른 창보다 앞에 유지합니다.
+TrayMoveHandleHint = 드래그하여 이동합니다. 두 번 클릭하면 트레이 옆으로 돌아갑니다.
 WindowMinimize = 최소화
 WindowRestore = 이전 크기로 복원
 WindowClose = 닫기
