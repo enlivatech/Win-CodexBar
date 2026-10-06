@@ -1,16 +1,16 @@
 import { Fragment, useEffect, useState, type CSSProperties } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, type Window } from "@tauri-apps/api/window";
 import type { BootstrapState, ProviderUsageSnapshot, UsageSpendSummary } from "../types/bridge";
 import type { LocaleKey } from "../i18n/keys";
 import { costPeriodShortLabel } from "../lib/costPeriod";
 import { useCurrency } from "../hooks/CurrencyProvider";
 import { sumDisplayCurrencyAmounts } from "../lib/currency";
 import {
-  beginFlyoutGesture,
   getUsageSpendSummary,
   openProviderDashboard,
   openProviderStatusPage,
   openSettingsWindow,
+  resetFlyoutPosition,
 } from "../lib/tauri";
 import {
   TRAY_SCALE_MAX,
@@ -176,7 +176,7 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
             onSettings={openSettings}
           />
         </MenuSurface>
-        <TrayResizeHandles />
+        <TrayWindowHandles moveHint={t("TrayMoveHandleHint")} />
       </div>
     );
   }
@@ -280,61 +280,77 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
           </div>
         )}
       </MenuSurface>
-      <TrayResizeHandles />
+      <TrayWindowHandles moveHint={t("TrayMoveHandleHint")} />
     </div>
   );
 }
 
+type ResizeDirection = Parameters<Window["startResizeDragging"]>[0];
+
+/** Every edge and corner, so a flyout the user moved away from the tray can
+ *  be resized from whichever side faces open screen. */
+const RESIZE_GRIPS: ReadonlyArray<{ edge: string; direction: ResizeDirection }> = [
+  { edge: "top", direction: "North" },
+  { edge: "bottom", direction: "South" },
+  { edge: "left", direction: "West" },
+  { edge: "right", direction: "East" },
+  { edge: "topleft", direction: "NorthWest" },
+  { edge: "topright", direction: "NorthEast" },
+  { edge: "bottomleft", direction: "SouthWest" },
+  { edge: "bottomright", direction: "SouthEast" },
+];
+
 /**
- * Invisible resize grips along the flyout's in-screen edges (top / left /
- * top-left corner). The flyout is anchored bottom-right above the tray, so these
- * let the user widen (left edge) or heighten (top edge) it. Native edge-resize
- * doesn't work through the borderless WebView2, so we drive it explicitly with
- * `startResizeDragging`. That call enters a Win32 modal size loop which
- * transiently steals focus from the WebView2 child for its duration — Windows
- * fires a spurious `Focused(false)` the instant the press starts even though
- * the user never left the window. We arm a gesture-scoped blur guard on the
- * backend *before* starting the loop so that transient blur doesn't
- * auto-hide the flyout; the guard clears itself once focus genuinely returns
- * (via the `Focused(true)` refocus path) or after a 15s expiry, so no
- * explicit end call is needed here — the OS loop swallows mouseup.
+ * Window handles for the borderless flyout: a move strip along the top and
+ * invisible resize grips on every edge and corner. The native frame left
+ * around the borderless WebView2 is only a few pixels wide, so both are driven
+ * explicitly with `startDragging` / `startResizeDragging`. Those calls enter a
+ * Win32 modal move/size loop which transiently steals focus from the WebView2
+ * child — Windows fires a spurious `Focused(false)` the instant the press
+ * starts. The backend keeps the flyout open on a blur while a mouse button is
+ * held on it, so no gesture guard is armed here; arming one would also keep
+ * the next genuine outside click from dismissing the panel for up to 15s.
+ *
+ * Dragging the strip moves the flyout away from the tray and the backend
+ * remembers the spot; double-clicking it anchors the flyout to the tray again.
  */
-function TrayResizeHandles() {
+function TrayWindowHandles({ moveHint }: { moveHint: string }) {
   return (
     <>
       <div
-        className="tray-resize tray-resize--top"
+        className="tray-move-handle"
         aria-hidden
+        title={moveHint}
         onMouseDown={(e) => {
+          if (e.button !== 0) return;
           e.preventDefault();
-          void (async () => {
-            await beginFlyoutGesture().catch(() => {});
-            await getCurrentWindow().startResizeDragging("North");
-          })().catch((err) => console.error("[tray-resize] startResizeDragging failed:", err));
+          if (e.detail === 2) {
+            void resetFlyoutPosition().catch((err) =>
+              console.error("[tray-move] resetFlyoutPosition failed:", err),
+            );
+            return;
+          }
+          void getCurrentWindow()
+            .startDragging()
+            .catch((err) => console.error("[tray-move] startDragging failed:", err));
         }}
-      />
-      <div
-        className="tray-resize tray-resize--left"
-        aria-hidden
-        onMouseDown={(e) => {
-          e.preventDefault();
-          void (async () => {
-            await beginFlyoutGesture().catch(() => {});
-            await getCurrentWindow().startResizeDragging("West");
-          })().catch((err) => console.error("[tray-resize] startResizeDragging failed:", err));
-        }}
-      />
-      <div
-        className="tray-resize tray-resize--topleft"
-        aria-hidden
-        onMouseDown={(e) => {
-          e.preventDefault();
-          void (async () => {
-            await beginFlyoutGesture().catch(() => {});
-            await getCurrentWindow().startResizeDragging("NorthWest");
-          })().catch((err) => console.error("[tray-resize] startResizeDragging failed:", err));
-        }}
-      />
+      >
+        <span className="tray-move-handle__grip" />
+      </div>
+      {RESIZE_GRIPS.map(({ edge, direction }) => (
+        <div
+          key={edge}
+          className={`tray-resize tray-resize--${edge}`}
+          aria-hidden
+          onMouseDown={(e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            void getCurrentWindow()
+              .startResizeDragging(direction)
+              .catch((err) => console.error("[tray-resize] startResizeDragging failed:", err));
+          }}
+        />
+      ))}
     </>
   );
 }

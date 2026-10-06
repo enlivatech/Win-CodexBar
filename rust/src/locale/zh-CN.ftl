@@ -447,6 +447,7 @@ DisplayModeCompact = 紧凑
 DisplayModeMinimal = 最简
 TrayPanelAlwaysOnTopLabel = 始终置顶
 TrayPanelAlwaysOnTopHelper = 即使失去焦点，也让托盘面板保持在其他窗口之上。
+TrayMoveHandleHint = 拖动以移动。双击可放回托盘旁。
 WindowMinimize = 最小化
 WindowRestore = 还原
 WindowClose = 关闭

@@ -514,6 +514,7 @@ DisplayModeCompact = Compacto
 DisplayModeMinimal = Mínimo
 TrayPanelAlwaysOnTopLabel = Sempre no topo
 TrayPanelAlwaysOnTopHelper = Mantenha o painel da bandeja acima das outras janelas, mesmo quando ele perder o foco.
+TrayMoveHandleHint = Arraste para mover. Clique duas vezes para voltar ao lado da bandeja.
 WindowMinimize = Minimizar
 WindowRestore = Restaurar
 WindowClose = Fechar

@@ -1123,33 +1123,99 @@ body:has(.tray-panel-reveal) {
   }
 }
 
-/* Flyout resize grips (top / left / top-left corner). Invisible strips at the
-   window's in-screen edges; the cursor change signals they're draggable. */
+/* Flyout window handles. Resize grips are invisible strips on every edge and
+   corner (a moved flyout can face open screen on any side); the cursor change
+   signals they're draggable. The move strip spans the top between the corner
+   grips, under the top edge grip, and shows a small grab bar. */
 .tray-resize {
   position: fixed;
   z-index: 50;
 }
-.tray-resize--top {
-  top: 0;
+.tray-resize--top,
+.tray-resize--bottom {
   left: 0;
   right: 0;
-  height: 10px;
+  height: 6px;
   cursor: ns-resize;
 }
-.tray-resize--left {
+.tray-resize--top {
   top: 0;
-  left: 0;
+}
+.tray-resize--bottom {
   bottom: 0;
-  width: 10px;
+}
+.tray-resize--left,
+.tray-resize--right {
+  top: 0;
+  bottom: 0;
+  width: 6px;
   cursor: ew-resize;
+}
+.tray-resize--left {
+  left: 0;
+}
+.tray-resize--right {
+  right: 0;
+}
+.tray-resize--topleft,
+.tray-resize--topright,
+.tray-resize--bottomleft,
+.tray-resize--bottomright {
+  width: 14px;
+  height: 14px;
+  z-index: 51;
 }
 .tray-resize--topleft {
   top: 0;
   left: 0;
-  width: 20px;
-  height: 20px;
   cursor: nwse-resize;
-  z-index: 51;
+}
+.tray-resize--bottomright {
+  bottom: 0;
+  right: 0;
+  cursor: nwse-resize;
+}
+.tray-resize--topright {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+.tray-resize--bottomleft {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+.tray-move-handle {
+  position: fixed;
+  top: 0;
+  left: 14px;
+  right: 14px;
+  height: 12px;
+  z-index: 49;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: move;
+}
+.tray-move-handle__grip {
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  transition: background 120ms ease-out;
+}
+.tray-move-handle:hover .tray-move-handle__grip {
+  background: rgba(255, 255, 255, 0.36);
+}
+[data-theme="light"] .tray-move-handle__grip {
+  background: rgba(0, 0, 0, 0.14);
+}
+[data-theme="light"] .tray-move-handle:hover .tray-move-handle__grip {
+  background: rgba(0, 0, 0, 0.32);
+}
+/* Keep the tray surface's first row clear of the move strip. */
+.tray-panel-reveal .menu-surface--tray {
+  padding-top: 12px;
 }
 
 .shell--tray-panel {

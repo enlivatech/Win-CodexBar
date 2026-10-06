@@ -12,6 +12,7 @@
 - Show independent session and weekly usage for native saved Claude Code accounts, with account-scoped OAuth renewal and safe authentication warnings.
 - Offer Refresh login beside Switch only for Claude and Codex accounts that need sign-in. Repair the selected saved login without switching to another account.
 - Use expanded, collapsible Claude and Codex account sections with Add account below the rows; keep the floating bar's usage footprint when authentication expires.
+- Let the tray panel be moved and resized again: drag the strip along its top to move it (the spot is remembered; double-click returns it next to the tray), resize from any edge or corner, and stop it from closing when a resize starts on its outer frame. Its remembered size is now kept in logical pixels, so it fits monitors with different scaling (a size saved by an earlier version is reset to the automatic size once).
 
 ## [Windows] 0.70.0 - 2026-10-03
 
