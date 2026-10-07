@@ -519,6 +519,42 @@ fn test_brazilian_portuguese_preserves_placeholders_and_status_spacing() {
     );
 }
 
+#[test]
+fn test_settings_tab_names_are_translated() {
+    let keys = [
+        LocaleKey::TabGeneral,
+        LocaleKey::TabProviders,
+        LocaleKey::TabNotifications,
+        LocaleKey::TabMenuBar,
+        LocaleKey::TabMenu,
+        LocaleKey::TabUsageSpend,
+        LocaleKey::TabAdvanced,
+        LocaleKey::TabAbout,
+        LocaleKey::UsageSpendTitle,
+    ];
+    // Words that are spelled the same as English in that language.
+    let same_word = [
+        (Language::Spanish, LocaleKey::TabGeneral),
+        (Language::PortugueseBrazil, LocaleKey::TabMenu),
+    ];
+
+    for &language in Language::all() {
+        if language == Language::English {
+            continue;
+        }
+        for key in keys {
+            if same_word.contains(&(language, key)) {
+                continue;
+            }
+            assert_ne!(
+                get_text(language, key),
+                get_text(Language::English, key),
+                "{language:?} {key:?} falls back to English"
+            );
+        }
+    }
+}
+
 fn resource_key_names(resource: &str) -> HashSet<&str> {
     resource
         .lines()

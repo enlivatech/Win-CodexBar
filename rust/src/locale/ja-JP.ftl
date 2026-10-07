@@ -5,7 +5,7 @@ TabMenuBar = メニューバー
 TabMenu = メニュー
 TabApiKeys = API キー
 TabCookies = Cookie
-TabUsageSpend = Usage & Spend
+TabUsageSpend = 使用量とコスト
 TabAdvanced = 詳細
 TabAbout = 情報
 TabShortcuts = ショートカット
@@ -313,7 +313,7 @@ HooksCaption = Run a local program when quota thresholds are crossed. Rules live
 HooksEnableLabel = Enable hooks
 HooksEnableHelper = Master switch. hooks.json must also set enabled=true and list absolute executable paths.
 HooksConfigPathHint = Config path: %APPDATA%\CodexBar\hooks.json (same folder as settings.json).
-UsageSpendTitle = Usage & Spend
+UsageSpendTitle = 使用量とコスト
 UsageSpendCaption = Local estimated cost history for Codex and Claude, plus period cost snapshots from other providers.
 UsageSpendRefresh = Refresh
 UsageSpendLoading = Scanning...
