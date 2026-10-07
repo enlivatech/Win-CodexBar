@@ -36,6 +36,7 @@ import { periodCostLabel, periodTokensLabel } from "../lib/costPeriod";
 import { providerCostPeriodTitle } from "../lib/providerLabels";
 import { resetDescriptionFallback, windowDetailText } from "../lib/usageWindows";
 import { localizeProviderText } from "../lib/providerText";
+import { localizeProviderLabel } from "../lib/windowLabels";
 import { isDetailSectionVisible } from "../lib/usageItemVisibility";
 import PaceDetailsChart from "./PaceDetailsChart";
 
@@ -706,7 +707,7 @@ export default function MenuCardDetails({
             >
               {group.title && (
                 <div className="menu-card__group-title" role="heading" aria-level={4}>
-                  {group.title}
+                  {localizeProviderLabel(group.title, t)}
                 </div>
               )}
               {group.rows.map((detail, index) => (

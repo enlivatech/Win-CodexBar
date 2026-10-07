@@ -72,7 +72,11 @@ describe("UsageSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     tauriMocks.getLocaleStrings.mockResolvedValue(
-      buildBundle({ InventoryAvailableCount: "{} available" }),
+      buildBundle({
+        InventoryAvailableCount: "{} available",
+        ProviderLabelLimitResetCredits: "Limit reset credits",
+        ProviderTextTokens: "{} tokens",
+      }),
     );
     eventMocks.listen.mockResolvedValue(() => {});
   });

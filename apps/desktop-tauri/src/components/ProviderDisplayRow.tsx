@@ -1,4 +1,5 @@
 import { useLocale } from "../hooks/useLocale";
+import { localizeProviderText } from "../lib/providerText";
 import { localizeProviderLabel } from "../lib/windowLabels";
 import type { ProviderDisplayDetail } from "../types/bridge";
 
@@ -65,11 +66,13 @@ export function ProviderDisplayRow({
   return (
     <div>
       <div className={lineClassName}>
-        <span>{title}: {detail.value}</span>
+        <span>{title}: {localizeProviderText(detail.value, t)}</span>
         {detail.secondaryValue && secondaryClassName && (
           <>
             {" "}
-            <span className={secondaryClassName}>{detail.secondaryValue}</span>
+            <span className={secondaryClassName}>
+              {localizeProviderText(detail.secondaryValue, t)}
+            </span>
           </>
         )}
       </div>
