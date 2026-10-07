@@ -949,7 +949,13 @@ describe("MenuCard", () => {
     const accounts = container.querySelector(".codex-menu-accounts")!;
     const metrics = container.querySelector(".menu-card__metrics")!;
     expect(accounts.compareDocumentPosition(metrics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(container.querySelector<HTMLDetailsElement>(".menu-card__more")?.open).toBe(false);
+    // The usage details block renders once its async data settles.
+    const more = await waitFor(() => {
+      const el = container.querySelector<HTMLDetailsElement>(".menu-card__more");
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    expect(more.open).toBe(false);
   });
 
   it("shows on-pace budgets and expands projection details", async () => {
