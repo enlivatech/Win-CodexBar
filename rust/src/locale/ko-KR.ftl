@@ -1,11 +1,11 @@
 TabGeneral = 일반
 TabProviders = 제공업체
-TabNotifications = Notifications
-TabMenuBar = Menu Bar
-TabMenu = Menu
+TabNotifications = 알림
+TabMenuBar = 메뉴 바
+TabMenu = 메뉴
 TabApiKeys = API 키
 TabCookies = 쿠키
-TabUsageSpend = Usage & Spend
+TabUsageSpend = 사용량 및 비용
 TabAdvanced = 고급
 TabAbout = 정보
 TabShortcuts = 단축키
@@ -313,7 +313,7 @@ HooksCaption = Run a local program when quota thresholds are crossed. Rules live
 HooksEnableLabel = Enable hooks
 HooksEnableHelper = Master switch. hooks.json must also set enabled=true and list absolute executable paths.
 HooksConfigPathHint = Config path: %APPDATA%\CodexBar\hooks.json (same folder as settings.json).
-UsageSpendTitle = Usage & Spend
+UsageSpendTitle = 사용량 및 비용
 UsageSpendCaption = Local estimated cost history for Codex and Claude, plus period cost snapshots from other providers.
 UsageSpendRefresh = Refresh
 UsageSpendLoading = Scanning...

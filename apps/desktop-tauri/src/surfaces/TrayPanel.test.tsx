@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const tauriMocks = vi.hoisted(() => ({
@@ -307,6 +307,9 @@ describe("TrayPanel provider grid", () => {
     );
   });
   afterEach(() => {
+    // Unmount before restoring mocks: a still-mounted panel can re-run an
+    // effect against a restored (undefined-returning) mock.
+    cleanup();
     vi.restoreAllMocks();
   });
 
