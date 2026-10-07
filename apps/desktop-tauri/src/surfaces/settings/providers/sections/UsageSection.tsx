@@ -15,6 +15,7 @@ import { useMonthlyLimitBlockNow } from "../../../../hooks/useMonthlyLimitBlockN
 import { isMonthlyLimitBlockActive } from "../../../../lib/monthlyLimitBlock";
 import { isUsageItemVisible } from "../../../../lib/usageItemVisibility";
 import { resetDescriptionFallback, windowDetailText } from "../../../../lib/usageWindows";
+import { localizeWindowLabel } from "../../../../lib/windowLabels";
 
 interface Props {
   provider: ProviderDetail;
@@ -38,14 +39,14 @@ export function UsageSection({ provider, resetTimeRelative, t }: Props) {
   if (provider.session && isUsageItemVisible(provider.hiddenUsageItemIds, "primary")) {
     bars.push({
       key: "session",
-      label: provider.primaryLabel || t("ProviderSessionLabel"),
+      label: localizeWindowLabel(provider.primaryLabel ?? undefined, t) || t("ProviderSessionLabel"),
       rate: provider.session,
     });
   }
   if (provider.weekly && isUsageItemVisible(provider.hiddenUsageItemIds, "secondary")) {
     bars.push({
       key: "weekly",
-      label: provider.secondaryLabel || t("ProviderWeeklyLabel"),
+      label: localizeWindowLabel(provider.secondaryLabel ?? undefined, t) || t("ProviderWeeklyLabel"),
       rate: provider.weekly,
     });
   }

@@ -371,7 +371,7 @@ describe("MenuCard", () => {
 
     renderCard(snapshot, { compactOverview: true });
 
-    expect(await screen.findByText("Session")).toBeInTheDocument();
+    expect(await screen.findByText("ProviderSessionLabel")).toBeInTheDocument();
     expect(screen.getByText("ProviderWeeklyLabel")).toBeInTheDocument();
     expect(screen.getByText("ProviderMonthly")).toBeInTheDocument();
     expect(document.querySelectorAll(".menu-metric")).toHaveLength(3);
