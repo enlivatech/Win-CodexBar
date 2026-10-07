@@ -1,3 +1,5 @@
+import { useLocale } from "../hooks/useLocale";
+import { localizeProviderLabel } from "../lib/windowLabels";
 import type { ProviderDisplayDetail } from "../types/bridge";
 
 const MAX_ROWS_PER_SECTION = 24;
@@ -49,6 +51,8 @@ export function ProviderDisplayRow({
   trackClassName: string;
   fillClassName: string;
 }) {
+  const { t } = useLocale();
+  const title = localizeProviderLabel(detail.title, t);
   const progress = detail.progress;
   const progressPercent =
     progress &&
@@ -61,7 +65,7 @@ export function ProviderDisplayRow({
   return (
     <div>
       <div className={lineClassName}>
-        <span>{detail.title}: {detail.value}</span>
+        <span>{title}: {detail.value}</span>
         {detail.secondaryValue && secondaryClassName && (
           <>
             {" "}
@@ -73,7 +77,7 @@ export function ProviderDisplayRow({
         <div
           className={trackClassName}
           role="progressbar"
-          aria-label={`${detail.title} progress`}
+          aria-label={title}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={progressPercent}

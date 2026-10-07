@@ -15,6 +15,7 @@ import { useMonthlyLimitBlockNow } from "../../../../hooks/useMonthlyLimitBlockN
 import { isMonthlyLimitBlockActive } from "../../../../lib/monthlyLimitBlock";
 import { isUsageItemVisible } from "../../../../lib/usageItemVisibility";
 import { resetDescriptionFallback, windowDetailText } from "../../../../lib/usageWindows";
+import { localizeProviderText } from "../../../../lib/providerText";
 import { localizeWindowLabel } from "../../../../lib/windowLabels";
 
 interface Props {
@@ -149,7 +150,7 @@ function UsageBar({
   const usedPct = Number.isFinite(rate.usedPercent) ? Math.max(0, rate.usedPercent) : 0;
   const pct = Math.min(100, usedPct);
   const isInformational = rate.isInformational === true;
-  const detailText = windowDetailText(rate);
+  const detailText = localizeProviderText(windowDetailText(rate), t) || null;
   const formattedReset = useFormattedResetTime(
     blocked ? null : rate.resetsAt,
     blocked ? null : resetDescriptionFallback(rate),
@@ -167,7 +168,7 @@ function UsageBar({
     );
   }
   const resetHint = formattedReset
-    ? resetTimeRelative
+    ? resetTimeRelative || !rate.resetsAt
       ? formattedReset
       : `${t("MetricResetsIn")} ${formattedReset}`
     : null;
@@ -181,7 +182,7 @@ function UsageBar({
           data-exhausted={rate.isExhausted || undefined}
         >
           {isInformational
-            ? rate.resetDescription?.trim() || formattedReset || "—"
+            ? localizeProviderText(rate.resetDescription?.trim(), t) || formattedReset || "—"
             : rate.isExhausted
             ? usedPct > 100
               ? `${usedPct.toFixed(0)}%`
