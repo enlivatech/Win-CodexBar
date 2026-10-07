@@ -283,6 +283,7 @@ describe("TrayPanel provider grid", () => {
     tauriMocks.getLocaleStrings.mockResolvedValue(
       buildBundle({
         ActionRefresh: "Refresh",
+        OverviewSpendProviderCoverage: "{} of {} providers have spend",
         MenuAbout: "About CodexBar",
         MenuQuit: "Quit",
         MenuSettings: "Settings...",
@@ -391,7 +392,7 @@ describe("TrayPanel provider grid", () => {
     expect(await screen.findByText((_, element) =>
       element?.tagName === "STRONG" && element.textContent === expectedTotal,
     )).toBeInTheDocument();
-    expect(screen.getByText(/1 of 2 OverviewSpendProviderCoverage/)).toBeInTheDocument();
+    expect(screen.getByText(/1 of 2 providers have spend/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "UsageSpendShare" })).not.toBeInTheDocument();
   });
 

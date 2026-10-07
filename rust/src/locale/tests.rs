@@ -555,6 +555,61 @@ fn test_settings_tab_names_are_translated() {
     }
 }
 
+#[test]
+fn test_every_language_translates_every_key_with_the_same_format_placeholders() {
+    let english = resource_entries(include_str!("en-US.ftl"));
+    let resources = [
+        ("zh-CN", include_str!("zh-CN.ftl")),
+        ("zh-TW", include_str!("zh-TW.ftl")),
+        ("ja-JP", include_str!("ja-JP.ftl")),
+        ("ko-KR", include_str!("ko-KR.ftl")),
+        ("es-MX", include_str!("es-MX.ftl")),
+        ("pt-BR", include_str!("pt-BR.ftl")),
+        ("ru-RU", include_str!("ru-RU.ftl")),
+        ("tr-TR", include_str!("tr-TR.ftl")),
+    ];
+
+    for (locale, resource) in resources {
+        let entries = resource_entries(resource);
+        let missing: Vec<&str> = english
+            .keys()
+            .filter(|name| !entries.contains_key(*name))
+            .copied()
+            .collect();
+        assert!(missing.is_empty(), "{locale} is missing keys: {missing:?}");
+        for (name, value) in &entries {
+            if let Some(english_value) = english.get(name) {
+                assert_eq!(
+                    placeables(value),
+                    placeables(english_value),
+                    "{locale} {name} format placeholders differ from en-US"
+                );
+            }
+        }
+    }
+}
+
+fn resource_entries(resource: &str) -> std::collections::HashMap<&str, &str> {
+    resource
+        .lines()
+        .filter(|line| !line.trim_start().starts_with('#'))
+        .filter_map(|line| line.split_once('='))
+        .map(|(name, value)| (name.trim(), value.trim()))
+        .filter(|(name, _)| !name.is_empty())
+        .collect()
+}
+
+fn placeables(value: &str) -> Vec<&str> {
+    value
+        .match_indices("{ \"{")
+        .filter_map(|(start, _)| {
+            value[start..]
+                .find("\" }")
+                .map(|end| &value[start..start + end + 3])
+        })
+        .collect()
+}
+
 fn resource_key_names(resource: &str) -> HashSet<&str> {
     resource
         .lines()
