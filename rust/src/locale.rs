@@ -1333,6 +1333,10 @@ locale_keys! {
     ProviderLiteLLMModelActivityHelper,
     ProviderClaudeWorkspaceSpend,
     ProviderClaudeWorkspaceSpendHelper,
+
+    // Usage-item visibility rows the provider no longer reports
+    UsageItemUnavailableTitle,
+    UsageItemFallbackTitle,
 }
 
 #[cfg(test)]
