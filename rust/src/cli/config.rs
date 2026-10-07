@@ -64,6 +64,35 @@ pub enum ConfigCommand {
         #[arg(long = "no-enable")]
         no_enable: bool,
     },
+    /// Remove a stored API key for a provider
+    RemoveApiKey {
+        #[command(flatten)]
+        target: ConfigProviderArg,
+    },
+    /// Store a browser Cookie header for providers that read web sessions
+    SetCookie {
+        #[command(flatten)]
+        target: ConfigProviderArg,
+        /// Cookie header value (e.g. "name=value; other=value")
+        #[arg(long)]
+        cookie: Option<String>,
+        /// Read the cookie header from stdin
+        #[arg(long)]
+        stdin: bool,
+        /// Store the cookie without enabling the provider
+        #[arg(long = "no-enable")]
+        no_enable: bool,
+    },
+    /// Remove a stored Cookie header for a provider
+    RemoveCookie {
+        #[command(flatten)]
+        target: ConfigProviderArg,
+    },
+    /// List which providers have a stored API key or Cookie header (values are never printed)
+    Credentials {
+        #[command(flatten)]
+        output: ConfigOutputArgs,
+    },
     /// Show configuration file paths
     Path,
     /// Export or import portable preferences (no secrets, no machine state)
@@ -193,6 +222,15 @@ pub async fn run(args: ConfigArgs) -> anyhow::Result<()> {
             stdin,
             no_enable,
         } => set_api_key(target.name(), api_key.as_deref(), stdin, !no_enable).await,
+        ConfigCommand::RemoveApiKey { target } => remove_api_key(target.name()),
+        ConfigCommand::SetCookie {
+            target,
+            cookie,
+            stdin,
+            no_enable,
+        } => set_cookie(target.name(), cookie.as_deref(), stdin, !no_enable),
+        ConfigCommand::RemoveCookie { target } => remove_cookie(target.name()),
+        ConfigCommand::Credentials { output } => list_credentials(output),
         ConfigCommand::Path => show_paths().await,
         ConfigCommand::Preferences { action } => transfer_preferences(action),
         ConfigCommand::ClaudeCodeCredentials { action, output } => {
@@ -629,6 +667,96 @@ async fn set_api_key(
 
     let suffix = if enable_provider { " and enabled" } else { "" };
     println!("Config: stored API key for {}{suffix}", id.display_name());
+    Ok(())
+}
+
+fn remove_api_key(provider: &str) -> anyhow::Result<()> {
+    let id = parse_provider(provider)?;
+    let mut keys = ApiKeys::load();
+    keys.remove(id.cli_name());
+    keys.save()?;
+    println!("Config: removed API key for {}", id.display_name());
+    Ok(())
+}
+
+fn set_cookie(
+    provider: &str,
+    cookie: Option<&str>,
+    read_from_stdin: bool,
+    enable_provider: bool,
+) -> anyhow::Result<()> {
+    let id = parse_provider(provider)?;
+    let header = resolve_api_key_input(cookie, read_from_stdin)
+        .map_err(|_| anyhow::anyhow!("Missing cookie. Pass --cookie <header> or use --stdin."))?;
+    let header = header
+        .strip_prefix("Cookie:")
+        .or_else(|| header.strip_prefix("cookie:"))
+        .unwrap_or(&header)
+        .trim()
+        .to_string();
+
+    let mut cookies = ManualCookies::load();
+    cookies.set(id.cli_name(), &header);
+    cookies.save()?;
+
+    if enable_provider {
+        let mut settings = Settings::load();
+        settings.enable_provider(id);
+        settings.save()?;
+    }
+
+    let suffix = if enable_provider { " and enabled" } else { "" };
+    println!("Config: stored cookie for {}{suffix}", id.display_name());
+    Ok(())
+}
+
+fn remove_cookie(provider: &str) -> anyhow::Result<()> {
+    let id = parse_provider(provider)?;
+    let mut cookies = ManualCookies::load();
+    cookies.remove(id.cli_name());
+    cookies.save()?;
+    println!("Config: removed cookie for {}", id.display_name());
+    Ok(())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CredentialStatus {
+    provider: &'static str,
+    display_name: &'static str,
+    accepts_api_key: bool,
+    has_api_key: bool,
+    has_cookie: bool,
+}
+
+fn list_credentials(output: ConfigOutputArgs) -> anyhow::Result<()> {
+    let keys = ApiKeys::load();
+    let cookies = ManualCookies::load();
+    let api_key_providers = crate::settings::get_api_key_providers();
+    let rows: Vec<CredentialStatus> = ProviderId::all()
+        .iter()
+        .map(|id| CredentialStatus {
+            provider: id.cli_name(),
+            display_name: id.display_name(),
+            accepts_api_key: api_key_providers.iter().any(|p| p.id == *id),
+            has_api_key: keys.get(id.cli_name()).is_some_and(|k| !k.is_empty()),
+            has_cookie: cookies.get(id.cli_name()).is_some_and(|c| !c.is_empty()),
+        })
+        .collect();
+
+    if output.is_json() {
+        return output.print_json(&rows);
+    }
+    for row in rows.iter().filter(|r| r.has_api_key || r.has_cookie) {
+        let mut parts = Vec::new();
+        if row.has_api_key {
+            parts.push("API key");
+        }
+        if row.has_cookie {
+            parts.push("cookie");
+        }
+        println!("{}: {}", row.display_name, parts.join(", "));
+    }
     Ok(())
 }
 
