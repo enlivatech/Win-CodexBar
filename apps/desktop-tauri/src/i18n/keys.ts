@@ -1051,6 +1051,8 @@ export const ALL_LOCALE_KEYS = [
   "ProviderLiteLLMModelActivityHelper",
   "ProviderClaudeWorkspaceSpend",
   "ProviderClaudeWorkspaceSpendHelper",
+  "UsageItemUnavailableTitle",
+  "UsageItemFallbackTitle",
 ] as const;
 
 export type LocaleKey = (typeof ALL_LOCALE_KEYS)[number];
