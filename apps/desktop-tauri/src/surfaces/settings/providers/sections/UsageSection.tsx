@@ -16,7 +16,7 @@ import { isMonthlyLimitBlockActive } from "../../../../lib/monthlyLimitBlock";
 import { isUsageItemVisible } from "../../../../lib/usageItemVisibility";
 import { resetDescriptionFallback, windowDetailText } from "../../../../lib/usageWindows";
 import { localizeProviderText } from "../../../../lib/providerText";
-import { localizeWindowLabel } from "../../../../lib/windowLabels";
+import { localizeProviderLabel, localizeWindowLabel } from "../../../../lib/windowLabels";
 
 interface Props {
   provider: ProviderDetail;
@@ -116,7 +116,7 @@ export function UsageSection({ provider, resetTimeRelative, t }: Props) {
               role="heading"
               aria-level={5}
             >
-              {group.title}
+              {localizeProviderLabel(group.title, t)}
             </div>
           )}
           {group.rows.map((detail) => (

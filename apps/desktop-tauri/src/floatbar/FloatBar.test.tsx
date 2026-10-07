@@ -231,6 +231,7 @@ describe("FloatBar", () => {
         ResetsInHoursOnly: "Resets in {}h",
         ProviderTextNoActiveSession: "No active 5h session",
         ProviderTextApiRate: "{} API-rate",
+        ProviderTextNoBudgetSet: "No budget set",
         TrayResetsDueNow: "Resetting",
         PanelToday: "Today",
         PanelUsedSuffix: "used",

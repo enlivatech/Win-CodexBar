@@ -149,6 +149,14 @@ describe("MenuCard", () => {
         WayfinderRequests: "Requests",
         OpenAIChartRequests: "Requests",
         ProviderTextRequests: "{} requests",
+        ProviderTextCreditsLeft: "{} credits left",
+        ProviderTextBalanceSuffix: "{} balance",
+        ProviderTextResetCreditsAvailable: "{} reset credits available",
+        ProviderLabelAdditionalBudget: "Additional budget",
+        ProviderLabelResetCredits: "Reset credits",
+        ProviderLabelTotalUsage: "Total usage",
+        WindowLabelHours: "{}-hour",
+        WindowLabelDays: "{}-day",
         ProviderTextNoActiveSession: "No active 5h session",
         WayfinderTokens: "Tokens",
         WayfinderSaved: "Saved",
@@ -399,7 +407,7 @@ describe("MenuCard", () => {
   });
 
   it("localizes Claude scoped weekly extra-window labels", async () => {
-    tauriMocks.getLocaleStrings.mockResolvedValue(buildBundle({ ClaudeScopedWeeklyLabel: "{} weekly" }));
+    tauriMocks.getLocaleStrings.mockResolvedValue(buildBundle({ ClaudeScopedWeeklyLabel: "{} weekly", ProviderLabelModelOnly: "{} only" }));
     const snapshot = provider(null, 20);
     snapshot.extraRateWindows = [
       {

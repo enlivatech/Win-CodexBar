@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { LocaleKey } from "../i18n/keys";
+import { localizeDates, localizeResetCountdown } from "../lib/providerText";
 import { useLocale } from "./useLocale";
 
 export type ResetTimeFormatMode = "reset" | "expires";
@@ -8,24 +9,6 @@ type Translate = (key: LocaleKey) => string;
 
 function fill(template: string, ...values: Array<string | number>): string {
   return values.reduce<string>((text, value) => text.replace("{}", String(value)), template);
-}
-
-/** Localize an English countdown body such as "2h 5m", "11m" or "3 days". */
-function localizeResetCountdown(body: string, t: Translate): string {
-  const lower = body.toLowerCase();
-  let m = /^(\d+)d (\d+)h$/.exec(lower);
-  if (m) return fill(t("ResetsInDaysHours"), m[1], m[2]);
-  m = /^(\d+)h (\d+)m$/.exec(lower);
-  if (m) return fill(t("ResetsInHoursMinutes"), m[1], m[2]);
-  m = /^(\d+)(?:m| minutes?)$/.exec(lower);
-  if (m) return fill(t("ResetsInMinutes"), m[1]);
-  m = /^(\d+)(?:h| hours?)$/.exec(lower);
-  if (m) return fill(t("ResetsInHoursOnly"), m[1]);
-  m = /^(\d+)(?:d| days?)$/.exec(lower);
-  if (m) return fill(t("ResetsInDaysOnly"), m[1]);
-  m = /^(\d+) seconds?$/.exec(lower);
-  if (m) return fill(t("ResetsInMinutes"), Math.max(1, Math.ceil(Number(m[1]) / 60)));
-  return fill(t("TrayResetsInLabel"), body);
 }
 
 /**
@@ -57,9 +40,9 @@ export function normalizeResetDescription(
     }
   }
   if (body.toLowerCase().startsWith("at ")) {
-    return fill(t("ResetsAtTime"), body.slice(3).trim());
+    return fill(t("ResetsAtTime"), localizeDates(body.slice(3).trim(), t));
   }
-  return fill(t("ResetsAtLabel"), body);
+  return fill(t("ResetsAtLabel"), localizeDates(body, t));
 }
 
 const absoluteResetFormatter = new Intl.DateTimeFormat(undefined, {
