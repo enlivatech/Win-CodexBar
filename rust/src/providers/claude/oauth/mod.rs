@@ -22,6 +22,12 @@ pub(super) fn clear_account_cache(credential_path: &std::path::Path) {
     ));
 }
 
+/// Drop in-memory OAuth credentials so the next fetch re-reads Claude Code's
+/// file / Credential Manager (CodexBar delegated-refresh: after `claude` runs).
+pub(super) fn clear_cached_credentials() {
+    credentials_store::clear_cache();
+}
+
 /// OAuth credentials from Claude CLI
 #[derive(Debug, Clone)]
 pub struct ClaudeOAuthCredentials {

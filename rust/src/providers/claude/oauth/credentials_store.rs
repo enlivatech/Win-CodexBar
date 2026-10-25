@@ -141,6 +141,15 @@ pub(super) fn load_credentials() -> Result<(ClaudeOAuthCredentials, CredentialSo
         return Ok((creds, source));
     }
 
+    // File existed but was an empty shell, and Credential Manager had nothing
+    // usable either — the CodexBar recovery is `claude login`, not another poll.
+    if file_error.to_string().to_lowercase().contains("empty") {
+        return Err(ProviderError::OAuth(
+            "Claude OAuth access token is empty in ~/.claude/.credentials.json and no usable \
+             Claude Code-credentials item was found in the OS store. Run `claude login`."
+                .to_string(),
+        ));
+    }
     Err(file_error)
 }
 
@@ -208,38 +217,41 @@ fn load_from_file() -> Result<ClaudeOAuthCredentials, ProviderError> {
 fn load_from_keyring() -> Result<Option<(ClaudeOAuthCredentials, CredentialSource)>, ProviderError>
 {
     for account in keyring_account_candidates() {
-        let entry = match keyring::Entry::new(KEYRING_SERVICE, &account) {
-            Ok(entry) => entry,
-            Err(err) => {
-                tracing::debug!(
-                    "Failed to open Claude Code credential entry for account {}: {}",
-                    account,
-                    err
-                );
+        for entry in keyring_entries_for_account(&account) {
+            let content = match entry.get_password() {
+                Ok(content) => content,
+                Err(keyring::Error::NoEntry) => continue,
+                Err(keyring::Error::Ambiguous(_)) => continue,
+                Err(err) => {
+                    tracing::debug!(
+                        "Failed to read Claude Code credential entry for account {}: {}",
+                        account,
+                        err
+                    );
+                    continue;
+                }
+            };
+
+            if content.trim().is_empty() {
                 continue;
             }
-        };
 
-        let content = match entry.get_password() {
-            Ok(content) => content,
-            Err(keyring::Error::NoEntry) => continue,
-            Err(keyring::Error::Ambiguous(_)) => continue,
-            Err(err) => {
-                tracing::debug!(
-                    "Failed to read Claude Code credential entry for account {}: {}",
-                    account,
-                    err
-                );
-                continue;
+            match parse_credentials_json(&content) {
+                Ok(creds) => {
+                    return Ok(Some((creds, CredentialSource::Keyring(account))));
+                }
+                Err(err) => {
+                    // Empty or MCP-only blobs must not abort the search: Claude Code
+                    // 2.x often blanks ~/.claude/.credentials.json and keeps the live
+                    // token in Credential Manager / Keychain under a different target.
+                    tracing::debug!(
+                        "Claude Code credential blob for account {} is unusable: {}",
+                        account,
+                        err
+                    );
+                }
             }
-        };
-
-        if content.trim().is_empty() {
-            continue;
         }
-
-        return parse_credentials_json(&content)
-            .map(|creds| Some((creds, CredentialSource::Keyring(account))));
     }
 
     #[cfg(target_os = "macos")]
@@ -337,6 +349,48 @@ fn credentials_from_oauth_data(oauth: OAuthData) -> Result<ClaudeOAuthCredential
         scopes: oauth.scopes.unwrap_or_default(),
         rate_limit_tier: oauth.rate_limit_tier,
     })
+}
+
+/// Open every Credential Manager / keyring lookup Claude Code is known to use.
+///
+/// On Windows, node-keytar (Claude Code) stores a Generic credential whose
+/// *target name* is the service (`Claude Code-credentials`). keyring-rs's
+/// default Windows target is `username.service`, so `Entry::new` never sees
+/// Claude Code's item. CodexBar on macOS reads the service name directly;
+/// we do the same here via `new_with_target`.
+fn keyring_entries_for_account(account: &str) -> Vec<keyring::Entry> {
+    let mut entries = Vec::new();
+    let mut push = |result: Result<keyring::Entry, keyring::Error>| match result {
+        Ok(entry) => entries.push(entry),
+        Err(err) => tracing::debug!(
+            "Failed to open Claude Code credential entry for account {account}: {err}"
+        ),
+    };
+
+    #[cfg(windows)]
+    {
+        for target in windows_credential_targets(account) {
+            push(keyring::Entry::new_with_target(
+                &target,
+                KEYRING_SERVICE,
+                account,
+            ));
+        }
+    }
+    push(keyring::Entry::new(KEYRING_SERVICE, account));
+    entries
+}
+
+/// Windows Credential Manager target names Claude Code / keytar have used.
+fn windows_credential_targets(account: &str) -> Vec<String> {
+    let mut targets = vec![
+        KEYRING_SERVICE.to_string(),
+        format!("{KEYRING_SERVICE}/{account}"),
+        format!("{account}/{KEYRING_SERVICE}"),
+        format!("{account}.{KEYRING_SERVICE}"),
+    ];
+    targets.dedup();
+    targets
 }
 
 fn keyring_account_candidates() -> Vec<String> {
@@ -525,6 +579,34 @@ mod tests {
 
         assert_eq!(credentials.access_token, "token");
         assert_eq!(credentials.scopes, vec!["user:profile"]);
+    }
+
+    #[test]
+    fn rejects_credentials_payload_with_empty_access_token() {
+        let error = parse_credentials_json(
+            r#"{
+                "claudeAiOauth": {
+                    "accessToken": "",
+                    "refreshToken": "",
+                    "scopes": ["user:profile"],
+                    "subscriptionType": "pro"
+                }
+            }"#,
+        )
+        .expect_err("empty access token is not usable");
+
+        assert!(
+            error
+                .to_string()
+                .contains("Claude OAuth access token is empty")
+        );
+    }
+
+    #[test]
+    fn windows_credential_targets_include_claude_code_service_name() {
+        let targets = super::windows_credential_targets("andyc");
+        assert!(targets.contains(&"Claude Code-credentials".to_string()));
+        assert!(targets.contains(&"andyc.Claude Code-credentials".to_string()));
     }
 
     #[test]

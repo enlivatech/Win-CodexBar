@@ -102,6 +102,18 @@ fn is_oauth_revoked_error(error: &ProviderError) -> bool {
 fn oauth_failure_uses_cli_cache(error: &ProviderError) -> bool {
     is_oauth_revoked_error(error) || oauth::is_rate_limited_error(error)
 }
+
+/// Empty / expired Claude Code tokens. CodexBar then lets `claude` rewrite
+/// its own store and retries OAuth instead of treating it as a hard logout.
+fn oauth_credentials_unusable(error: &ProviderError) -> bool {
+    let lowered = error.to_string().to_lowercase();
+    lowered.contains("access token is empty")
+        || lowered.contains("access token missing")
+        || lowered.contains("credentials not found")
+        || lowered.contains("token expired")
+        || lowered.contains("run `claude` to authenticate")
+        || lowered.contains("run `claude login`")
+}
 pub use oauth::ClaudeOAuthFetcher;
 pub use web_api::ClaudeWebApiFetcher;
 
@@ -909,6 +921,10 @@ impl ClaudeProvider {
 
         // Upstream 0.50.1 #2516: track whether OAuth failed with a revocation.
         let oauth_result = self.fetch_via_oauth(ctx).await;
+        let oauth_unusable = oauth_result
+            .as_ref()
+            .err()
+            .is_some_and(oauth_credentials_unusable);
         let use_cli_cache = oauth_result
             .as_ref()
             .err()
@@ -927,9 +943,11 @@ impl ClaudeProvider {
             return Ok(cached);
         }
 
-        if let Some(mut result) =
-            record_auto_source(&mut failures, "CLI", self.fetch_via_cli(ctx).await)?
-        {
+        let cli_result = self.fetch_via_cli(ctx).await;
+        // CodexBar delegated refresh: running `claude` can rewrite Credential
+        // Manager / .credentials.json. Retry OAuth once after that touch.
+        let cli_ran = !matches!(&cli_result, Err(ProviderError::NotInstalled(_)));
+        if let Some(mut result) = record_auto_source(&mut failures, "CLI", cli_result)? {
             // Without consent for reading Claude Code credentials, label the
             // CLI fallback as reduced fidelity.
             if !claude_code_consent() {
@@ -941,6 +959,14 @@ impl ClaudeProvider {
                 cache_cli_result(result.clone());
             }
             return Ok(result);
+        }
+
+        if oauth_unusable && cli_ran && claude_code_consent() {
+            oauth::clear_cached_credentials();
+            tracing::debug!("Retrying Claude OAuth after owner CLI touch");
+            if let Ok(result) = self.fetch_via_oauth(ctx).await {
+                return Ok(result);
+            }
         }
 
         // Upstream 0.50.1 #2516: when all live sources fail, keep the
@@ -2179,6 +2205,14 @@ Resets Dec 24 at 3:59pm (Europe/Paris)
         assert!(!should_fallback_from_claude_cli_error(
             &ProviderError::AuthRequired
         ));
+    }
+
+    #[test]
+    fn empty_access_token_is_unusable_oauth_for_delegated_retry() {
+        assert!(oauth_credentials_unusable(&ProviderError::OAuth(
+            "Claude OAuth access token is empty. Run `claude` to authenticate.".to_string(),
+        )));
+        assert!(!oauth_credentials_unusable(&ProviderError::NoCookies));
     }
 
     #[test]
